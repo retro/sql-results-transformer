@@ -1,29 +1,34 @@
 import hash from 'hash-it';
 
-type Pk = string[];
+type Pk = string;
 
 type Mappings<S extends string, T extends string> = {
   [k in T]: S;
 };
 
 type IHasTransform<S extends string, T extends string> = {
-  pk: Pk;
+  pk: Pk[];
   mappings: Mappings<S, T>;
 };
 
 type ValueOf<T> = T[keyof T];
 
+type TransformInput<
+  M extends Mappings<string, string>,
+  P extends Pk[]
+> = Record<ValueOf<M>, unknown> & { [key in P[number]]: unknown };
+
 interface IMappable {
   transform: (item: unknown) => unknown;
 }
 
-function getPkHash(pk: Pk, item: Record<string, unknown>): number {
+function getPkHash(pk: Pk[], item: Record<string, unknown>): number {
   const pkVal = pk.map((i) => item[i]);
   return hash(pkVal);
 }
 
-class Schema {
-  constructor(readonly pk: Pk) {}
+class Schema<P extends Pk> {
+  constructor(readonly pk: P[]) {}
   pickMapped<S1 extends string, T1 extends string>(
     sourceAttr: S1,
     targetAttr: T1
@@ -36,23 +41,26 @@ class Schema {
 }
 
 class Mapping<
-  P extends Mappings<string, string>,
+  P extends Pk,
+  M extends Mappings<string, string>,
   S extends string,
   T extends string
 > implements IHasTransform<S, T>
 {
-  readonly pk: Pk;
-  readonly mappings: P & Mappings<S, T>;
+  readonly pk: P[];
+  readonly mappings: M & Mappings<S, T>;
 
-  constructor(prevMappings: P, prevPk: Pk, sourceAttr: S, targetAttr: T) {
+  constructor(prevMappings: M, prevPk: P[], sourceAttr: S, targetAttr: T) {
     this.pk = prevPk;
     this.mappings = {
       ...prevMappings,
       [targetAttr]: sourceAttr,
-    } as P & Mappings<S, T>;
+    } as M & Mappings<S, T>;
   }
 
-  transform<I extends Record<ValueOf<this['mappings']>, unknown>>(items: I[]) {
+  transform<I extends TransformInput<this['mappings'], this['pk']>>(
+    items: I[]
+  ) {
     const acc: Map<number, unknown> = new Map();
     for (const item of items) {
       const pkHash = getPkHash(this.pk, item);
@@ -81,22 +89,15 @@ class Mapping<
   }
 }
 
-export function schema(...pks: Pk) {
+export function schema<T extends Pk>(...pks: T[]) {
   return new Schema(pks);
 }
 
-const s = schema('foo')
+const s = schema('foo', 'bar')
   .pickMapped('parent_val', 'val')
-  .pickMapped('parent_id', 'id')
-  .pick('foo');
+  .pickMapped('parent_id', 'id');
 
 const b = s.transform([
-  { parent_val: 'foo', parent_id: 1, foo: 'bar' },
-  { parent_val: '1', parent_id: 2, foo: 'baz' },
+  { parent_val: 'foo', parent_id: 1, foo: 1, bar: 2 },
+  { parent_val: '1', parent_id: 2, foo: '1', bar: 2 },
 ]);
-
-/*const r = new RootMapping('parent_id', 'id')
-  .pickMapped('parent_val', 'val')
-  .pickMapped('parent_foo', 'foo');
-
-const a = r.transform({ parent_id: 1, parent_val: 'foo', parent_foo: 'foo' });*/
