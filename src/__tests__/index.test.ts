@@ -1,18 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { decomposeOne, schema } from '../index';
+import { schema } from '../index';
 
-describe('schema()', () => {
+describe('simple decomposition', () => {
   it('should build schema with one attribute', () => {
-    const s = schema('parent_id').withMapping('parent_id', 'id');
-    const decomposed = s.decomposeAll([{ parent_id: 1 }]);
+    const s = schema('parent_id').pickMapped('parent_id', 'id');
+    const decomposed = s.transform([{ parent_id: 1 }]);
     expect(decomposed).toEqual([{ id: 1 }]);
   });
+
   it('should build schema with multiple attributes', () => {
     const s = schema('parent_id')
-      .withMapping('parent_id', 'id')
-      .withMapping('parent_val', 'val');
-    const decomposed = s.decomposeAll([{ parent_id: 1, parent_val: 'p1' }]);
+      .pickMapped('parent_id', 'id')
+      .pickMapped('parent_val', 'val');
+    const decomposed = s.transform([{ parent_id: 1, parent_val: 'p1' }]);
     expect(decomposed).toEqual([{ id: 1, val: 'p1' }]);
+  });
+
+  it('should deduplicate and preserve order of items', () => {
+    const s = schema('parent_id')
+      .pickMapped('parent_id', 'id')
+      .pickMapped('parent_val', 'val');
+    const decomposed = s.transform([
+      { parent_id: 1, parent_val: 'p1' },
+      { parent_id: 2, parent_val: 'p2' },
+      { parent_id: 1, parent_val: 'p1' },
+    ]);
+    expect(decomposed).toEqual([
+      { id: 1, val: 'p1' },
+      { id: 2, val: 'p2' },
+    ]);
   });
 });
 

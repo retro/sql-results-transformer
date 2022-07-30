@@ -1,88 +1,83 @@
+import hash from 'hash-it';
+
 type Pk = string[];
 
-type IHasDecompose<S extends string, T extends string> = {
+type Mappings<S extends string, T extends string> = {
+  [k in T]: S;
+};
+
+type IHasTransform<S extends string, T extends string> = {
   pk: Pk;
-  source: S;
-  target: T;
-  mappings: { [k in T]: S };
+  mappings: Mappings<S, T>;
 };
 
 type ValueOf<T> = T[keyof T];
 
 interface IMappable {
-  pk: Pk;
-  decompose: (item: unknown) => unknown;
+  transform: (item: unknown) => unknown;
+}
+
+function getPkHash(pk: Pk, item: Record<string, unknown>): number {
+  const pkVal = pk.map((i) => item[i]);
+  return hash(pkVal);
 }
 
 class Schema {
   constructor(readonly pk: Pk) {}
-  withMapping<S1 extends string, T1 extends string>(source: S1, target: T1) {
-    return new RootMapping(this.pk, source, target);
+  pickMapped<S1 extends string, T1 extends string>(
+    sourceAttr: S1,
+    targetAttr: T1
+  ) {
+    return new Mapping({}, this.pk, sourceAttr, targetAttr);
   }
-}
-
-class RootMapping<S extends string, T extends string>
-  implements IHasDecompose<S, T>
-{
-  readonly pk: Pk;
-  readonly source: S;
-  readonly target: T;
-  readonly mappings: { [k in T]: S };
-  constructor(pk: Pk, source: S, target: T) {
-    this.pk = pk;
-    this.source = source;
-    this.target = target;
-    this.mappings = { [target]: source } as { [k in T]: S };
-  }
-  decompose<I extends Record<S, unknown>>(item: I): { [k in T]: I[S] } {
-    return { [this.target]: item[this.source] } as { [k in T]: I[S] };
-  }
-  decomposeAll<I extends Record<S, unknown>>(items: I[]) {
-    return items.map((i) => this.decompose(i));
-  }
-  withMapping<S1 extends string, T1 extends string>(source: S1, target: T1) {
-    return new Mapping(this, source, target);
+  pick<T extends string>(attr: T) {
+    return new Mapping({}, this.pk, attr, attr);
   }
 }
 
 class Mapping<
-  P extends IHasDecompose<string, string>,
+  P extends Mappings<string, string>,
   S extends string,
   T extends string
-> implements IHasDecompose<S, T>
+> implements IHasTransform<S, T>
 {
   readonly pk: Pk;
-  readonly source: S;
-  readonly target: T;
-  readonly mappings: P['mappings'] & { [k in T]: S };
+  readonly mappings: P & Mappings<S, T>;
 
-  constructor(prev: P, source: S, target: T) {
-    this.pk = prev.pk;
-    this.source = source;
-    this.target = target;
-    this.mappings = { ...prev.mappings, [target]: source } as P['mappings'] & {
-      [k in T]: S;
-    };
+  constructor(prevMappings: P, prevPk: Pk, sourceAttr: S, targetAttr: T) {
+    this.pk = prevPk;
+    this.mappings = {
+      ...prevMappings,
+      [targetAttr]: sourceAttr,
+    } as P & Mappings<S, T>;
   }
 
-  decompose<I extends Record<ValueOf<this['mappings']>, unknown>>(item: I) {
-    const val: Record<string, unknown> = {};
-    Object.entries(this.mappings).forEach(([k, v]) => {
-      val[k] = item[v as ValueOf<this['mappings']>];
-    });
-    return val as {
-      [Property in keyof this['mappings']]: I[this['mappings'][Property]];
-    };
+  transform<I extends Record<ValueOf<this['mappings']>, unknown>>(items: I[]) {
+    const acc: Map<number, unknown> = new Map();
+    for (const item of items) {
+      const pkHash = getPkHash(this.pk, item);
+      if (!acc.has(pkHash)) {
+        const transformed: Record<string, unknown> = {};
+        Object.entries(this.mappings).forEach(([k, v]) => {
+          transformed[k] = item[v as ValueOf<this['mappings']>];
+        });
+        acc.set(pkHash, transformed);
+      }
+    }
+    return Array.from(acc.values()) as Array<{
+      [P in keyof this['mappings']]: I[this['mappings'][P]];
+    }>;
   }
 
-  decomposeAll<I extends Record<ValueOf<this['mappings']>, unknown>>(
-    items: I[]
+  pickMapped<S1 extends string, T1 extends string>(
+    sourceAttr: S1,
+    targetAttr: T1
   ) {
-    return items.map((i) => this.decompose(i));
+    return new Mapping(this.mappings, this.pk, sourceAttr, targetAttr);
   }
 
-  withMapping<S1 extends string, T1 extends string>(source: S1, target: T1) {
-    return new Mapping(this, source, target);
+  pick<T extends string>(attr: T) {
+    return new Mapping(this.mappings, this.pk, attr, attr);
   }
 }
 
@@ -91,16 +86,17 @@ export function schema(...pks: Pk) {
 }
 
 const s = schema('foo')
-  .withMapping('parent_val', 'val')
-  .withMapping('parent_id', 'id');
+  .pickMapped('parent_val', 'val')
+  .pickMapped('parent_id', 'id')
+  .pick('foo');
 
-const b = s.decomposeAll([
-  { parent_val: 'foo', parent_id: 1 },
-  { parent_val: 1, parent_id: 'foo' },
+const b = s.transform([
+  { parent_val: 'foo', parent_id: 1, foo: 'bar' },
+  { parent_val: '1', parent_id: 2, foo: 'baz' },
 ]);
 
 /*const r = new RootMapping('parent_id', 'id')
-  .withMapping('parent_val', 'val')
-  .withMapping('parent_foo', 'foo');
+  .pickMapped('parent_val', 'val')
+  .pickMapped('parent_foo', 'foo');
 
-const a = r.decompose({ parent_id: 1, parent_val: 'foo', parent_foo: 'foo' });*/
+const a = r.transform({ parent_id: 1, parent_val: 'foo', parent_foo: 'foo' });*/
