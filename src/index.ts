@@ -1,10 +1,10 @@
-import hash from 'hash-it';
+import hash from "hash-it";
 
 type ValueOf<T> = T[keyof T];
 
 type SchemaRequiredAttrs<S extends GenericSchema> =
-  | ValueOf<S['transforms']>['requiredAttrs'][number]
-  | S['pk'][number];
+  | ValueOf<S["transforms"]>["requiredAttrs"][number]
+  | S["pk"][number];
 
 /*type SchemaRequiredAttrs<S extends GenericSchema> = string &
   (
@@ -40,18 +40,18 @@ type TransformReturnType<
   I extends Record<string, unknown>,
   S extends GenericSchema
 > = {
-  [Attr in keyof S['transforms']]: S['transforms'][Attr] extends TransformerGet<string>
-    ? I[S['transforms'][Attr]['key']]
-    : S['transforms'][Attr] extends TransformerNestOneSchema<
+  [Attr in keyof S["transforms"]]: S["transforms"][Attr] extends TransformerGet<string>
+    ? I[S["transforms"][Attr]["key"]]
+    : S["transforms"][Attr] extends TransformerNestOneSchema<
         GenericSchema,
         string
       >
-    ? TransformReturnType<I, S['transforms'][Attr]['schema']>
-    : S['transforms'][Attr] extends TransformerNestManySchema<
+    ? TransformReturnType<I, S["transforms"][Attr]["schema"]>
+    : S["transforms"][Attr] extends TransformerNestManySchema<
         GenericSchema,
         string
       >
-    ? TransformReturnType<I, S['transforms'][Attr]['schema']>[]
+    ? TransformReturnType<I, S["transforms"][Attr]["schema"]>[]
     : never;
 };
 
@@ -95,7 +95,7 @@ export class TransformerNestOneSchema<
       [...this.schema.pk]
     ) as A[];
   }
-  transform<I extends TransformInputType<this['schema']>>(input: I[]) {
+  transform<I extends TransformInputType<this["schema"]>>(input: I[]) {
     return this.schema.transform(input)[0];
   }
 }
@@ -116,7 +116,7 @@ export class TransformerNestManySchema<
       [...this.schema.pk]
     ) as A[];
   }
-  transform<I extends TransformInputType<this['schema']>>(input: I[]) {
+  transform<I extends TransformInputType<this["schema"]>>(input: I[]) {
     return this.schema.transform(input);
   }
 }
